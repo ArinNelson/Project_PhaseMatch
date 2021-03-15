@@ -1,0 +1,275 @@
+% Process Model Data
+%==========================================================================
+
+% Switches
+Switch     = zeros(9,1);
+Switch(01) = 0;     % Init bandpass filters
+Switch(02) = 0;     % Perform bandpass and highpass temporal filterings
+Switch(03) = 0;     % Compute stationary tides
+
+% Directories
+dir_mdl    = 'F:\Datasets\HYCOM\PhaseMatch';
+str_mdl    = {'NonDA_2016','DA_2016','DA_Modern'};
+str_altm   = {'j2','j3'};
+str_mthd   = {'track','lin'};
+str_tide   = {'M2','S2','N2','K1','O1'};
+
+% Options
+do_debug   = 1;  
+ref_m_to_a = [1 1 2];
+ref_a_to_m = [2 3];
+
+% Filter parameters
+dt = 1/24;                    % Timestep
+fs = 1/dt;                    % Sampling frequency  
+%fcuts = [0.82 0.87 1.05 1.10 1.80 1.85 2.05 2.10];
+fcuts = [0.75 0.80 1.10 1.15 1.75 1.80 2.10 2.15];
+fmags = [0 1 0 1 0];
+fdevs = [0.05 0.01 0.05 0.01 0.05];
+fhigh = 2.15;
+
+% Constants
+n_track = 254;                      % # altimeter tracks
+n_mdl   = numel(str_mdl);           % # model simulations
+n_altm  = numel(str_altm);          % # altimeter missions
+n_mthd  = numel(str_mthd);
+
+%==========================================================================
+if(Switch(01))
+    
+  % Semidiurnal filter
+  [n,Wn,beta,ftype] = kaiserord(fcuts(5:8),fmags(3:5),fdevs(3:5),fs);
+  n                 = n + rem(n,2);
+  fltr_s            = fir1(n,Wn,ftype,kaiser(n+1,beta),'noscale');
+  clear n Wn beta ftype;  
+    
+  % Diurnal filter
+  [n,Wn,beta,ftype] = kaiserord(fcuts(1:4),fmags(1:3),fdevs(1:3),fs);
+  n                 = n + rem(n,2);
+  fltr_d            = fir1(n,Wn,ftype,kaiser(n+1,beta),'noscale');
+  clear n Wn beta ftype;
+  
+  % Full tide filter
+  [n,Wn,beta,ftype] = kaiserord(fcuts,fmags,fdevs,fs); 
+  n                 = n + rem(n,2);
+  fltr_f            = fir1(n,Wn,ftype,kaiser(n+1,beta),'noscale'); 
+  clear n Wn beta ftype;
+    
+  % RESULTS FROM PREVIOUS TESTING:
+  % location of fcuts doesn't seem to matter much, variance in model is 
+  % usually strongly carried in/near the peaks.
+  
+  % TO LOOK AT FILTER RESPONSE:
+  % fvtool(fltr_f)
+    
+end
+%==========================================================================
+if(Switch(02))
+    
+  % Loop through model outputs
+  for im=3 %1:n_mdl
+    
+    % Load sampling info
+    info = struct;
+    info(2).lon = [];
+    info(2).lat = [];
+    info(2).segnum = [];
+    for id=1:n_mthd
+      tmp = load(['Data\' str_mthd{id} '_info_' str_altm{ref_m_to_a(im)} '.mat'],'lon','lat','segnum');
+      info(id).lon = tmp.lon;
+      info(id).lat = tmp.lat;
+      info(id).segnum = tmp.segnum;
+    end
+    clear tmp id;
+    
+    % Load model info
+    %mdl_info = load(['Data\mdl_info_' str_mdl{im} '.mat']);
+      
+    % Some test vars to make sure results look reasonable
+    dat_var = cell(n_mthd,1);
+    for id=1:n_mthd; dat_var{id} = NaN(n_track,size(info(id).lon,2),4); end
+    
+    % Loop through tracks
+    for it=1:n_track %Ones with errors: 95, 234
+    %try
+        
+      % This model's processed data file
+      f_mdl = [dir_mdl '\' str_mdl{im} '\_Processed\MATLAB\Track' sprintf('%0.3d',it) 'mat.mat'];
+      load(f_mdl,'*_dat');
+      
+      % Number of time points
+      nt = size(track_dat,1);
+      
+      % Loop through methods
+      for id=1:n_mthd
+      clc; disp(['On model output #' num2str(im) ', Track #' num2str(it) ', Method ' num2str(id) '...']);
+          
+        % This method's data
+        eval(['dat = ' str_mthd{id} '_dat; clear ' str_mthd{id} '_dat;']);
+          
+        % Filtered data
+        dat_final = NaN(size(dat,1),size(dat,2),4);
+          
+        % Loop through valid points
+        ii = (~isnan(info(id).segnum(it,:)) & sum(~isnan(dat))>1);
+        parfor ip=1:numel(ii)
+        if(ii(ip))
+          dat_final(:,ip,:) = proc_mdl_data_parpiece(dat(:,ip),fltr_s,fltr_d,fltr_f,fhigh,fs);
+        end 
+        end
+        clear ip;
+        
+        % Test vars
+        dat_var{id}(it,:,:) = nanvar(dat_final);
+        
+        % Save to file
+        eval([str_mthd{id} '_dat_filt = dat_final; ' ...
+                           'clear dat_final; ' ...
+                           'save(f_mdl,''' str_mthd{id} '_dat_filt'',''-append''); ' ...
+                           'clear ' str_mthd{id} '_dat_filt;']);
+        
+      end
+      clear id;
+      
+      % Clean-up
+      clear f_mdl nt;
+    
+    %catch err
+    %end
+    end
+    clear it;
+    
+    % Debug plot
+    if(do_debug)
+    for id=1:n_mthd
+        
+      % Data
+      ii = find(~isnan(info(id).segnum));
+      xx = info(id).lon(ii);  
+      yy = info(id).lat(ii);
+      
+      % Plot
+      figure('units','normalized','outerposition',[0 0 1 1]);
+        for jj=1:4
+          zz = log10(dat_var{id}(:,:,jj));
+          zz = zz(ii);
+          subplot(2,2,jj);
+            scatter(xx(:),yy(:),2,zz(:),'o','filled'); axis tight; box on; set(gca,'color','k');
+            colorbar; colormap(jet); caxis([-4 2]);
+            title([str_mthd{id} ' sssh filter#' num2str(jj) ]);
+        end
+      print(gcf,'-dpng',['Plots\Debug\Debug_Step05-1_' str_mthd{id} '_' str_mdl{im} '.png']);
+      close all; clear ii xx yy zz;  
+        
+    end; clear id;
+    end
+    
+    % Save filtered data
+    for id=1:n_mthd
+      eval([str_mthd{id} '_sssh_var_filt = dat_var{id}; ' ...
+            'save(''Data\mdl_info_' str_mdl{im} '.mat'',''' str_mthd{id} '_sssh_var_filt'',''-append''); ' ...
+            'clear ' str_mthd{id} '_sssh_var_filt;']);
+    end
+    clear id dat_var;
+    
+    % Clean-up
+    clear info mdl_info dat_var;
+    
+  end 
+  clear im;
+    
+end
+%==========================================================================
+if(Switch(03))
+    
+  % UTIDE package
+  addpath('C:\Library\Codes\MATLAB\UTIDE');
+    
+  % Loop through model outputs and sampling methods
+  for im=3 %1:n_mdl
+  for id=2 %1:n_mthd
+      
+    % Info
+    load(['Data\' str_mthd{id} '_info_' str_altm{ref_m_to_a(im)} '.mat'],'lon','lat','segnum');
+    n_track = size(lat,1);
+    n_point = size(lat,2);
+    
+    % Tidal constituent containers
+    tide_fit = NaN(n_track,n_point,5,2);
+    
+    % Time
+    f_mdl  = [dir_mdl '\' str_mdl{im} '\_Processed\MATLAB\Track' sprintf('%0.3d',1) 'mat.mat'];
+    load(f_mdl,'time');
+    n_time = numel(time);
+    clear f_mdl;
+    
+    % Loop through tracks
+    for it=1:n_track
+    clc; disp(['On output #' num2str(im) ', method #' num2str(id) ', track #' num2str(it) '...']);
+        
+      % This model's processed data file
+      f_mdl = [dir_mdl '\' str_mdl{im} '\_Processed\MATLAB\Track' sprintf('%0.3d',it) 'mat.mat'];
+      load(f_mdl,[str_mthd{id} '_dat_filt']); 
+      
+      % Get raw data
+      %eval(['dat_raw = ' str_mthd{id} '_dat; clear ' str_mthd{id} '_dat;']);
+      
+      % Get filtered data
+      eval(['dat_filt = ' str_mthd{id} '_dat_filt(:,:,3); clear ' str_mthd{id} '_dat_filt;']);
+      
+      % Init time series
+      tide_timeseries = NaN(n_time,n_point,5);
+      
+      % Loop through points
+      parfor ip=1:n_point
+      if(~all(isnan(dat_filt(:,ip))))    
+          
+        % Will be its own function so it can be parallelized
+        [tide_fit(it,ip,:,:), tide_timeseries(:,ip,:)] = comp_mdl_tide_parpiece(time,dat_filt(:,ip),lat(it,ip));
+          
+      end    
+      end
+      clear ip;
+       
+      % Save tide time series
+      eval([str_mthd{id} '_tide_timeseries = tide_timeseries; clear tide_timeseries; ' ...
+           'save(f_mdl,''' str_mthd{id} '_tide_timeseries'',''-append''); ' ...
+           'clear ' str_mthd{id} '_tide_timeseries;']);
+      
+      % Clean-up
+      clear f_mdl dat_filt;
+        
+    end
+    clear it;
+    
+    % Debug plot
+    if(do_debug)
+      figure('units','normalized','outerposition',[0 0 1 1]);
+        ii = find(~isnan(segnum));
+        xx = lon(ii);
+        yy = lat(ii);
+        for jj=1:5
+          zz = abs(tide_fit(:,:,jj,1));  
+          zz(zz<tide_fit(:,:,jj,2)) = NaN;
+          zz = zz(ii);
+          subplot(2,3,jj);
+            scatter(xx,yy,2,log10(zz),'o','filled'); axis tight; box on; set(gca,'color','k');
+            colorbar; colormap(jet); caxis([-2 2]);
+            title([str_tide{jj} ' Amplitude ( Log_{10}(cm) )']);
+        end
+      print(gcf,'-dpng',['Debug_Step05-3_' str_mdl{im} '_' str_mthd{id} '.png']);
+      close all; clear jj xx yy ii;
+    end
+    
+    % Save
+    save(['Data\' str_mthd{id} '_' str_mdl{im} '_tidefit.mat'],'tide_fit');
+    
+    % Clean-up
+    clear n_point tide_fit;
+      
+  end
+  end
+  clear im id;
+
+end
+%==========================================================================
