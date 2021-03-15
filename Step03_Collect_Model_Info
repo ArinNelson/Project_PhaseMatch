@@ -1,0 +1,205 @@
+% Collect information from the model output
+% Arin Nelson
+%==========================================================================
+
+% Switches
+Switch     = zeros(9,1);
+Switch(01) = 1;     % Do
+
+% Directories
+dir_mdl    = '\Datasets\HYCOM\PhaseMatch';
+str_mdl    = {'NonDA_2016','DA_2016','DA_Modern'};
+str_altm   = {'j2','j3'};
+str_mthd   = {'track','lin'};
+
+% Options
+do_debug   = 1;  
+ref_m_to_a = [1 1 2];
+ref_a_to_m = [2 3];
+time_lims  = {[736330-0.001 736529], [736695.999 737791]};
+mdl_fac    = 100/9.8;   % ssh in HYCOM output is actually ssh (in meters) / g (9.8). Converts to cm
+out_range  = [-200 200];    % sssh values beyond these values are removed
+
+% Options for valid data points
+num_min    = [7,111];
+dshore_min = 12;
+bath_min   = 500;
+gap_max    = 30;
+length_min = 1200;
+
+% Constants
+n_mdl  = numel(str_mdl);
+n_altm = numel(str_altm);
+n_mthd = numel(str_mthd);
+
+%==========================================================================
+if(Switch(01))
+    
+  % Loop through simulations
+  for im=3 %1:n_mdl
+    
+    % Load track info
+    track_info = load(['Data\track_info_' str_altm{ref_m_to_a(im)} '.mat']);
+    lin_info   = load(['Data\lin_info_' str_altm{ref_m_to_a(im)} '.mat']);
+    n_track    = size(track_info.lon,1); 
+    n_point    = size(track_info.lon,2);
+    n_lin      = size(lin_info.lon,2);
+    
+    % Variables to compute
+    track_sssh_mean = NaN(n_track,n_point);
+    track_sssh_var  = NaN(n_track,n_point);
+    lin_sssh_mean   = NaN(n_track,n_lin  );
+    lin_sssh_var    = NaN(n_track,n_lin  );
+    
+    % Loop through tracks
+    for it=1:n_track
+    clc; disp(['On model #' num2str(im) ', Track #' num2str(it) '...']);
+    
+      % New file name
+      if(it==1)
+        dir_new  = [dir_mdl '\' str_mdl{im} '\_Processed\MATLAB'];
+        if(exist(dir_new,'dir')~=7); mkdir(dir_new); end
+      end
+      file_new = [dir_new '\Track' sprintf('%0.3d',it) 'mat.mat'];
+      
+      % Only continue if computations not yet done
+      if(exist(file_new,'file')~=2)
+      
+        % File name  
+        file_data = [dir_mdl '\' str_mdl{im} '\_Processed\Track' sprintf('%0.3d',it) '.nc']; 
+      
+        % Get this track's info
+        index  = track_info.index_link{it};
+      
+        % Load data
+        time               = ncread(file_data,'t');
+        tmp                = ncread(file_data,'sssh')';
+        track_dat          = NaN(numel(time),n_point);  
+        track_dat(:,index) = tmp.*mdl_fac;
+
+        % Truncate to specified time range
+        if(~exist('itime','var'))
+          tlim           = time_lims{ref_m_to_a(im)};
+          itime          = find(time>tlim(1) & time<tlim(2));
+          n_time         = numel(itime);
+          track_is_avail = zeros(n_track,n_point,n_time,'uint8');
+          lin_is_avail   = zeros(n_track,n_lin,n_time,'uint8');
+        end
+        time       = time(itime);
+        track_dat  = track_dat(itime,:);
+      
+%       % Some model points in DA_Modern are bad, attempt to remove them?
+%       if( strcmp(str_mdl{im},'DA_Modern') )
+%           
+%         % Compare to...
+%         if(it==1)
+%             
+%           % Gather max's and min's  
+%           test = zeros(n_track,2);
+%           for ii=1:n_track
+%             clc; disp(num2str(ii));  
+%             file_compare = [dir_mdl '\' str_mdl{2} '\_Processed\Track' sprintf('%0.3d',ii) '.nc']; 
+%             dat_compare  = ncread(file_compare,'sssh').*mdl_fac;
+%             test(ii,1) = min(dat_compare(:));
+%             test(ii,2) = max(dat_compare(:));
+%           end
+%           clear ii file_compare dat_compare;
+%           
+%           % Determine an outlier range
+%           outlier_range = [min(test(:)), max(test(:))];
+%           % NOTE: For DA_2016, outlier_range = [-200.5 177.7].  Maybe set
+%           to [-200 +200]?
+%         
+%           
+%         end
+        
+        % Use same outlier range for all runs for consistency?
+        track_dat(track_dat<out_range(1) | track_dat>out_range(2)) = NaN;
+          
+%       end
+
+        % Also interpolate dat to lin points
+        lin_dat = NaN(n_time,n_lin);
+        for ic=1:n_time
+        if(sum(~isnan(track_dat(ic,:)))>2)    
+          lin_dat(ic,:) = naninterp1(track_info.dist(it,:),track_dat(ic,:),lin_info.dist,'linear');
+        end
+        end
+        clear ic;
+        
+        % Save time series
+        save(file_new,'time','track_dat','lin_dat','-v7.3');
+        
+        % Ensure if saved correctly
+        test = whos('-file',file_new);
+        
+      else
+          
+        % Load time series 
+        load(file_new,'time','track_dat','lin_dat');
+        
+      end
+      clear file_new;
+
+      % Determine how many data points are available
+      track_is_avail(it,:,:) = ~isnan(track_dat)';
+      lin_is_avail(it,:,:)   = ~isnan(lin_dat)';
+      
+      % And other datums
+      track_sssh_mean(it,:) = nanmean(track_dat);
+      track_sssh_var(it,:)  = nanvar(track_dat);
+      lin_sssh_mean(it,:)   = nanmean(lin_dat);
+      lin_sssh_var(it,:)    = nanvar(lin_dat);
+        
+      % Clean-up
+      clear file_data index time tmp track_dat tlim lin_dat
+      
+    end
+    clear it;
+    
+    % Debug plot
+    if(do_debug)
+      ii = find(track_info.mask==1);
+      jj = find(lin_info.mask==1);
+      xt = track_info.lon(ii);  xl = lin_info.lon(jj);
+      yt = track_info.lat(ii);  yl = lin_info.lat(jj);
+      figure('units','normalized','outerposition',[0.25 0 0.5 1]);
+        subplot(3,2,1);
+          zz = track_sssh_mean(ii);
+          scatter(xt,yt,2,zz,'o','filled'); axis tight; box on;
+          colorbar; colormap(jet); title('track sssh mean (cm)');
+        subplot(3,2,3);
+          zz = track_sssh_var(ii);
+          scatter(xt,yt,2,log10(zz),'o','filled'); axis tight; box on;
+          colorbar; colormap(jet); title('Log_{10}( track sssh var (cm^2) )');
+        subplot(3,2,5);
+          zz = sum(track_is_avail,3); zz = zz(ii);
+          scatter(xt,yt,2,zz,'o','filled'); axis tight; box on;
+          colorbar; colormap(jet); title('# track Outputs');
+        subplot(3,2,2);
+          zz = lin_sssh_mean(jj);
+          scatter(xl,yl,2,zz,'o','filled'); axis tight; box on;
+          colorbar; colormap(jet); title('lin sssh mean (cm)');
+        subplot(3,2,4);
+          zz = lin_sssh_var(jj);
+          scatter(xl,yl,2,log10(zz),'o','filled'); axis tight; box on;
+          colorbar; colormap(jet); title('Log_{10}( lin sssh var (cm^2) )');
+        subplot(3,2,6);
+          zz = sum(lin_is_avail,3); zz = zz(jj);
+          scatter(xl,yl,2,zz,'o','filled'); axis tight; box on;
+          colorbar; colormap(jet); title('# lin Outputs');
+      print(gcf,'-dpng',['Plots/Debug/Debug_Step03-01_' str_mdl{im} '_info.png']);
+      close all; clear ii xt yt xl tl zz;
+    end
+    
+    % Save
+    save(['Data\mdl_info_' str_mdl{im} '.mat'],'track_sssh_mean','track_sssh_var','track_is_avail',...
+                                               'lin_sssh_mean',  'lin_sssh_var',  'lin_is_avail',  '-v7.3');
+    
+    % Clean-up
+    clear track_info lin_info n_track n_point n_lin track_ssh_* lin_ssh_* *_is_avail
+    
+  end
+  clear im;
+    
+end
