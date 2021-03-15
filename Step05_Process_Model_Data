@@ -8,7 +8,7 @@ Switch(02) = 0;     % Perform bandpass and highpass temporal filterings
 Switch(03) = 0;     % Compute stationary tides
 
 % Directories
-dir_mdl    = 'F:\Datasets\HYCOM\PhaseMatch';
+dir_mdl    = '\Datasets\HYCOM\PhaseMatch';
 str_mdl    = {'NonDA_2016','DA_2016','DA_Modern'};
 str_altm   = {'j2','j3'};
 str_mthd   = {'track','lin'};
@@ -183,7 +183,7 @@ end
 if(Switch(03))
     
   % UTIDE package
-  addpath('C:\Library\Codes\MATLAB\UTIDE');
+  addpath('.\UTIDE');
     
   % Loop through model outputs and sampling methods
   for im=3 %1:n_mdl
