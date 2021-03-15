@@ -9,3 +9,5 @@ Brian K. Arbic - U. Mich.
 Jay F. Shriver - NRL
 Jim Richman - NRL
 (others?)
+
+UTIDE source: http://www.po.gso.uri.edu/~codiga/utide/utide.htm
