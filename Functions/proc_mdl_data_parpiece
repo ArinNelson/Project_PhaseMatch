@@ -1,0 +1,20 @@
+function dat_filt = proc_mdl_data_parpiece(dat_pt, fltr_s, fltr_d, fltr_f, fhigh, fs)
+
+          % Filter doesn't like NaNs, so fill them in for now
+          dat_fill = nanfill(dat_pt);
+        
+          % Init filtered data matrix
+          dat_filt = NaN(numel(dat_pt),4);
+        
+          % Apply bandpass filters
+          dat_filt(:,1) = filtfilt(fltr_s,1,dat_fill);	% Semidiurnal
+          dat_filt(:,2) = filtfilt(fltr_d,1,dat_fill);  % Diurnal
+          dat_filt(:,3) = filtfilt(fltr_f,1,dat_fill);  % Full
+          
+          % Apply highpass filter
+          dat_filt(~isnan(dat_fill),4) = highpass(dat_fill(~isnan(dat_fill)),fhigh,fs);
+          
+          % Re-apply NaNs
+          dat_filt(isnan(dat_pt),:) = NaN;
+
+end
