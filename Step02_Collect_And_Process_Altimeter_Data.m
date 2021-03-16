@@ -6,11 +6,12 @@ clc; close all;
 
 % Switches
 Switch     = zeros(9,1);
-Switch(01) = 0;     % Collect raw altimeter data
-Switch(02) = 0;     % Interpolate to standard-track and linear-track points
+Switch(01) = 1;     % Collect raw altimeter data
+Switch(02) = 1;     % Interpolate to standard-track and linear-track points
 
 % Directories
-dir_altm = '\Datasets\Altimetry\Jason_StandardCorrections_fromEd';
+dir_data = '.\Data';
+dir_altm = 'F:\Datasets\Altimetry\Jason_StandardCorrections_fromEd';
 str_altm = {'j2','j3'};         % Altimeter missions
 str_smpl = {'track','lin'};     % Sampling points
 
@@ -86,11 +87,11 @@ if(Switch(01))
         subplot(3,1,2); scatter(xx(ii),yy(ii),2,zs(ii),'o','filled'); axis tight; box on; colormap(jet); colorbar; title('sla std'); 
         subplot(3,1,3); scatter(xx(ii),yy(ii),2,nn(ii),'o','filled'); axis tight; box on; colormap(jet); colorbar; title('num');
       print(gcf,'-dpng',['Plots/Debug/Debug_Step02-01_' str_altm{ia} '_raw.png']);
-      clear xx yy nn zm zs ii
+      close all; clear xx yy nn zm zs ii
     end
     
     % Save
-    save(['Data/raw_data_' str_altm{ia} '.mat'],'lon','lat','time','sla','num');
+    save([dir_data '\raw_data_' str_altm{ia} '.mat'],'lon','lat','time','sla','num');
      
     % Clean-up
     clear lon lat time sla num;
@@ -107,8 +108,8 @@ if(Switch(02))
   for is=1:n_smpl
       
     % Load info
-     raw_data = load(['Data/raw_data_'   str_altm{ia} '.mat']);
-    smpl_info = load(['Data/' str_smpl{is} '_info_' str_altm{ia} '.mat']);
+     raw_data = load([dir_data '\raw_data_'   str_altm{ia} '.mat']);
+    smpl_info = load([dir_data '\' str_smpl{is} '_info_' str_altm{ia} '.mat']);
     n_point   = size(smpl_info.lon,2);  
     
     % Init new variables
@@ -210,16 +211,16 @@ if(Switch(02))
           zz = []; for it=1:n_track; zz = [zz(:); nanstd(sla{it},0,1)']; end
           scatter(xx(ii),yy(ii),2,zz(ii),'o','filled'); axis tight; colormap(jet); colorbar; title('sla std');
       print(gcf,'-dpng',['Plots/Debug/Debug_Step02-02_' str_altm{ia} '_' str_smpl{is} '.png']);
-      clear xx yy zz ii; close all;  
+      close all; clear xx yy zz ii; close all;  
     end
 
     % Save (track)
-    save(['Data\' str_smpl{is} '_data_' str_altm{ia} '.mat'],'time','sla'); %,'num');
+    save([dir_data '\' str_smpl{is} '_data_' str_altm{ia} '.mat'],'time','sla'); %,'num');
     
     % Save (append)
     dist = dist_raw;
-    save(['Data\raw_data_' str_altm{ia} '.mat'],'dist','-append');
-    save(['Data\' str_smpl{is} '_info_' str_altm{ia} '.mat'],'num','-append');
+    save([dir_data '\raw_data_' str_altm{ia} '.mat'],'dist','-append');
+    save([dir_data '\' str_smpl{is} '_info_' str_altm{ia} '.mat'],'num','-append');
     
     % Clean-up
     clear raw_data smpl_info time sla num dist dist_raw;
