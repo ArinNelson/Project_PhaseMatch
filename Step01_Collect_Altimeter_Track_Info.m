@@ -1,6 +1,6 @@
-% Collect altimeter standard tracks and information along them
+% Collect altimeter standard tracks
 % Arin Nelson
-% 12/12/2020
+% Rewritten 12/12/2020
 %==========================================================================
 clc; close all;
 
@@ -12,26 +12,28 @@ Switch(03) = 0;         % Interpolate bathymetry & land-sea mask from GEBCO
 Switch(04) = 0;         % Interpolate distance-from-coast from GEBCO
 Switch(05) = 0;         % Separate info's into separate files per mission
 Switch(06) = 0;         % Interpolate basin indices to track points
-Switch(07) = 0;         % Link model points to track points
+Switch(07) = 1;         % Link model points to track points
 
 % Directories & Files
-dir_info     = '\Datasets\PODAAC\';
-file_bath    = '\Datasets\HYCOM\depth_GLBc0.04_27.a';
-file_dshore  = '\Datasets\GEBCO\GEBCO_gridone_distance_to_coastline_v2.0m.nc';
-file_mdlgrid = '\Datasets\HYCOM/HYCOM25_Grid.mat';
-file_basins  = '\Datasets\NOAA\range_area.msk';
-dir_mdl      = '\Datasets\HYCOM\PhaseMatch';
+addpath('Functions');
+dir_data     = '.\Data';
+dir_info     = 'F:\Datasets\PODAAC\';
+file_bath    = 'F:\Datasets\HYCOM\depth_GLBc0.04_27.a';
+file_dshore  = 'F:\Datasets\GEBCO\GEBCO_gridone_distance_to_coastline_v2.0m.nc';
+file_mdlgrid = 'F:\Datasets\HYCOM/HYCOM25_Grid.mat';
+file_basins  = 'F:\Datasets\NOAA\range_area.msk';
+dir_mdl      = 'F:\Datasets\HYCOM\PhaseMatch';
 str_mdl      = {'DA_2016','DA_Modern'};
 
 % Options
 do_debug      = 1;              % Show debug plots
 rE            = 6371;           % Radius of Earth (km)
-str_altm      = {'j2','j3'};	  % Altimeter labels (Jason-2 & -3)
+str_altm      = {'j2','j3'};	% Altimeter labels
 dist_lin_step = 6.6;            % Step size of linearly-spaced-points (km)
 
 % Constants
 n_altm = numel(str_altm);
-  
+
 %==========================================================================
 if(Switch(01))
     
@@ -100,7 +102,7 @@ if(Switch(01))
   end
 
   % Save?
-  save('Data/track_info_raw.mat','lon','lat','dist','str_altm');
+  save([dir_data '\track_info_raw.mat'],'lon','lat','dist','str_altm');
   
   % Clean-up
   clear eqcrosses* reftrack_* lon* lat* dist
@@ -110,7 +112,7 @@ end
 if(Switch(02))
   
   % Raw track info
-  track_info = load('Data/track_info_raw.mat');
+  track_info = load([dir_data '\track_info_raw.mat']);
     
   % Generate evenly-spaced-points distance-along-track values
   dist_start = 0;
@@ -156,8 +158,8 @@ if(Switch(02))
   if(do_debug)
     figure('units','normalized','outerposition',[0 0 1 1]);
       hold on;
-        for it=1 %:n_track
-        for ia=1 %:n_altm
+        for it=1  %:n_track
+        for ia=1  %:numel(str_altm) 
           scatter(track_info.lon(it,:,ia),track_info.lat(it,:),8,track_info.dist(it,:,ia),'d','filled'); 
           scatter(lon(it,:,ia),lat(it,:),8,dist,'s','filled'); 
         end
@@ -168,7 +170,7 @@ if(Switch(02))
   end
   
   % Save?
-  save('Data/lin_info_raw.mat','lon','lat','dist','str_altm');
+  save([dir_data '\lin_info_raw.mat'],'lon','lat','dist','str_altm');
     
   % Clean-up
   clear track_info dist_start dist_end dist lon lat
@@ -178,8 +180,8 @@ end
 if(Switch(03))
 
   % Load in needed data
-  track_info = load('Data/track_info_raw.mat');
-    lin_info = load('Data/lin_info_raw.mat');
+  track_info = load([dir_data '\track_info_raw.mat']);
+    lin_info = load([dir_data '\lin_info_raw.mat']);
     
   % Dimensions  
   n_track    = size(track_info.lon,1);
@@ -254,19 +256,19 @@ if(Switch(03))
   end
       
   % Save
-  bath = bath_track;    mask = mask_track;  save('Data/track_info_raw.mat','bath','mask','-append');    clear bath mask;
-  bath = bath_lin;      mask = mask_lin;    save('Data/lin_info_raw.mat',  'bath','mask','-append');    clear bath mask;
+  bath = bath_track;    mask = mask_track;  save([dir_data '\track_info_raw.mat'],'bath','mask','-append');    clear bath mask;
+  bath = bath_lin;      mask = mask_lin;    save([dir_data '\lin_info_raw.mat'],  'bath','mask','-append');    clear bath mask;
     
   % Clean-up
-  clear *_info ntrplnt bath_* mask_* *_mdl;
+  clear *_info ntrplnt bath_* mask_* lon_mdl lat_mdl;
   
 end
 %==========================================================================
 if(Switch(04))
     
   % Load track info's
-  track_info = load('Data/track_info_raw.mat');
-    lin_info = load('Data/lin_info_raw.mat');
+  track_info = load([dir_data '\track_info_raw.mat']);
+    lin_info = load([dir_data '\lin_info_raw.mat']);
     
   % Dimensions  
   n_track = size(track_info.lon,1);
@@ -318,8 +320,8 @@ if(Switch(04))
   end
       
   % Save
-  dshore = dshore_track;    save('Data/track_info_raw.mat','dshore','-append');     clear dshore dshore_track;
-  dshore = dshore_lin;      save('Data/lin_info_raw.mat',  'dshore','-append');     clear dshore dshore_lin;
+  dshore = dshore_track;    save([dir_data '\track_info_raw.mat'],'dshore','-append');     clear dshore dshore_track;
+  dshore = dshore_lin;      save([dir_data '\lin_info_raw.mat'],  'dshore','-append');     clear dshore dshore_lin;
   
   % Clean-up
   clear *_info *_gebco
@@ -343,7 +345,7 @@ if(Switch(05))
   for ii=1:numel(str_info)
       
     % Load track info
-    load(['Data/' str_info{ii} '_info_raw.mat'],'lon','lat');
+    load([dir_data '\' str_info{ii} '_info_raw.mat'],'lon','lat');
     
     % Interpolate
     basin = NaN(size(lon));
@@ -352,7 +354,7 @@ if(Switch(05))
     end
     
     % Save
-    save(['Data/' str_info{ii} '_info_raw.mat'],'basin','-append');
+    save([dir_data '\' str_info{ii} '_info_raw.mat'],'basin','-append');
     
     % Clean-up
     clear lon lat basin;
@@ -365,8 +367,8 @@ end
 if(Switch(06))
    
   % Load info's  
-  info_track = load('Data/track_info_raw.mat');
-  info_lin   = load('Data/lin_info_raw.mat');
+  info_track = load([dir_data '\track_info_raw.mat']);
+  info_lin   = load([dir_data '\lin_info_raw.mat']);
     
   % Save via mission
   for ia=1:n_altm
@@ -381,7 +383,7 @@ if(Switch(06))
     basin  = info_track.basin(:,:,ia);
       
     % Save
-    save(['Data/track_info_' str_altm{ia} '.mat'],'lon','lat','dist','bath','mask','dshore','basin');
+    save([dir_data '\track_info_' str_altm{ia} '.mat'],'lon','lat','dist','bath','mask','dshore','basin');
     clear lon lat dist bath mask dshore basin;
     
     % Lin info
@@ -394,15 +396,15 @@ if(Switch(06))
     basin  = info_lin.basin(:,:,ia);
       
     % Save
-    save(['Data/lin_info_' str_altm{ia} '.mat'],'lon','lat','dist','bath','mask','dshore','basin');
+    save([dir_data '\lin_info_' str_altm{ia} '.mat'],'lon','lat','dist','bath','mask','dshore','basin');
     clear lon lat dist bath mask dshore basin; 
       
   end
   clear ia;
   
-  % Delete original files
-  %delete('Data/track_info.mat');
-  %delete('Data/lin_info.mat');
+  % Delete original files?
+  %delete(dir_data '\track_info_raw.mat');
+  %delete(dir_data '\lin_info_raw.mat');
       
 end
 %==========================================================================
@@ -412,13 +414,14 @@ if(Switch(07))
   for ia=1:n_altm
   
     % Load track info
-    track_info = load(['Data\track_info_' str_altm{ia} '.mat'],'lon','lat');
+    track_info = load([dir_data '\track_info_' str_altm{ia} '.mat'],'lon','lat');
     n_track    = size(track_info.lon,1);
     
     % Variable to determine: index_link
     index_link = cell(n_track,1);
     for it=1:n_track
-      
+    clc; disp(['On altimeter mission #' num2str(ia) ', track # ' num2str(it) '...']);
+    
       % Model file
       fmdl = [dir_mdl '\' str_mdl{ia} '\_Processed\Track' sprintf('%0.3d',it) '.nc']; 
         
@@ -475,12 +478,12 @@ if(Switch(07))
         end
         plot(real(x(:)),imag(x(:)),'.k',real(y(:)),imag(y(:)),'.b');
       axis tight; box on; title('index link');
-      print(gcf,'-dpng',['Debug_step01-6_index-link_' str_altm{ia} '.png']);
+      print(gcf,'-dpng',['Plots/Debug/Debug_step01-6_index-link_' str_altm{ia} '.png']);
       clear x y it; close all;
     end
     
     % Save (appends)
-    save(['Data\track_info_' str_altm{ia} '.mat'],'index_link','-append');
+    save([dir_data '\track_info_' str_altm{ia} '.mat'],'index_link','-append');
     
   end
   clear ia;
