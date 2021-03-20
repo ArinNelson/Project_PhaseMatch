@@ -5,10 +5,12 @@
 Switch     = zeros(9,1);
 Switch(01) = 0;     % Init bandpass filters
 Switch(02) = 0;     % Perform bandpass and highpass temporal filterings
-Switch(03) = 0;     % Compute stationary tides
+Switch(03) = 0;     % Compute stationary tides and their timeseries
 
 % Directories
-dir_mdl    = '\Datasets\HYCOM\PhaseMatch';
+addpath('.\Functions');
+dir_data   = '.\Data';
+dir_mdl    = 'F:\Datasets\HYCOM\PhaseMatch';
 str_mdl    = {'NonDA_2016','DA_2016','DA_Modern'};
 str_altm   = {'j2','j3'};
 str_mthd   = {'track','lin'};
@@ -67,41 +69,37 @@ end
 if(Switch(02))
     
   % Loop through model outputs
-  for im=3 %1:n_mdl
+  for im=1:n_mdl
     
     % Load sampling info
     info = struct;
     info(2).lon = [];
     info(2).lat = [];
-    info(2).segnum = [];
+    info(2).is_valid = [];
     for id=1:n_mthd
-      tmp = load(['Data\' str_mthd{id} '_info_' str_altm{ref_m_to_a(im)} '.mat'],'lon','lat','segnum');
+      tmp = load([dir_data '\' str_mthd{id} '_info_' str_altm{ref_m_to_a(im)} '.mat'],'lon','lat','is_valid');
       info(id).lon = tmp.lon;
       info(id).lat = tmp.lat;
-      info(id).segnum = tmp.segnum;
+      info(id).is_valid = tmp.is_valid;
     end
     clear tmp id;
-    
-    % Load model info
-    %mdl_info = load(['Data\mdl_info_' str_mdl{im} '.mat']);
       
     % Some test vars to make sure results look reasonable
     dat_var = cell(n_mthd,1);
     for id=1:n_mthd; dat_var{id} = NaN(n_track,size(info(id).lon,2),4); end
     
     % Loop through tracks
-    for it=1:n_track %Ones with errors: 95, 234
-    %try
+    for it=1:n_track %DA_Modern tracks with errors: 95, 234
         
       % This model's processed data file
-      f_mdl = [dir_mdl '\' str_mdl{im} '\_Processed\MATLAB\Track' sprintf('%0.3d',it) 'mat.mat'];
+      f_mdl = [dir_mdl '\' str_mdl{im} '\_Processed\MATLAB\Track' sprintf('%0.3d',it) '.mat'];
       load(f_mdl,'*_dat');
       
       % Number of time points
       nt = size(track_dat,1);
       
       % Loop through methods
-      for id=1:n_mthd
+      for id=2 %1:n_mthd
       clc; disp(['On model output #' num2str(im) ', Track #' num2str(it) ', Method ' num2str(id) '...']);
           
         % This method's data
@@ -111,7 +109,7 @@ if(Switch(02))
         dat_final = NaN(size(dat,1),size(dat,2),4);
           
         % Loop through valid points
-        ii = (~isnan(info(id).segnum(it,:)) & sum(~isnan(dat))>1);
+        ii = ( (info(id).is_valid(it,:)==1) & sum(~isnan(dat))>1);
         parfor ip=1:numel(ii)
         if(ii(ip))
           dat_final(:,ip,:) = proc_mdl_data_parpiece(dat(:,ip),fltr_s,fltr_d,fltr_f,fhigh,fs);
@@ -134,17 +132,15 @@ if(Switch(02))
       % Clean-up
       clear f_mdl nt;
     
-    %catch err
-    %end
     end
     clear it;
     
     % Debug plot
     if(do_debug)
-    for id=1:n_mthd
+    for id=2 %1:n_mthd
         
       % Data
-      ii = find(~isnan(info(id).segnum));
+      ii = find(info(id).is_valid==1);
       xx = info(id).lon(ii);  
       yy = info(id).lat(ii);
       
@@ -165,9 +161,9 @@ if(Switch(02))
     end
     
     % Save filtered data
-    for id=1:n_mthd
+    for id=2 %1:n_mthd
       eval([str_mthd{id} '_sssh_var_filt = dat_var{id}; ' ...
-            'save(''Data\mdl_info_' str_mdl{im} '.mat'',''' str_mthd{id} '_sssh_var_filt'',''-append''); ' ...
+            'save([dir_data ''\mdl_info_' str_mdl{im} '.mat''],''' str_mthd{id} '_sssh_var_filt'',''-append''); ' ...
             'clear ' str_mthd{id} '_sssh_var_filt;']);
     end
     clear id dat_var;
@@ -186,11 +182,11 @@ if(Switch(03))
   addpath('.\UTIDE');
     
   % Loop through model outputs and sampling methods
-  for im=3 %1:n_mdl
+  for im=1:n_mdl
   for id=2 %1:n_mthd
       
     % Info
-    load(['Data\' str_mthd{id} '_info_' str_altm{ref_m_to_a(im)} '.mat'],'lon','lat','segnum');
+    load([dir_data '\' str_mthd{id} '_info_' str_altm{ref_m_to_a(im)} '.mat'],'lon','lat','is_valid');
     n_track = size(lat,1);
     n_point = size(lat,2);
     
@@ -198,7 +194,7 @@ if(Switch(03))
     tide_fit = NaN(n_track,n_point,5,2);
     
     % Time
-    f_mdl  = [dir_mdl '\' str_mdl{im} '\_Processed\MATLAB\Track' sprintf('%0.3d',1) 'mat.mat'];
+    f_mdl  = [dir_mdl '\' str_mdl{im} '\_Processed\MATLAB\Track' sprintf('%0.3d',1) '.mat'];
     load(f_mdl,'time');
     n_time = numel(time);
     clear f_mdl;
@@ -208,7 +204,7 @@ if(Switch(03))
     clc; disp(['On output #' num2str(im) ', method #' num2str(id) ', track #' num2str(it) '...']);
         
       % This model's processed data file
-      f_mdl = [dir_mdl '\' str_mdl{im} '\_Processed\MATLAB\Track' sprintf('%0.3d',it) 'mat.mat'];
+      f_mdl = [dir_mdl '\' str_mdl{im} '\_Processed\MATLAB\Track' sprintf('%0.3d',it) '.mat'];
       load(f_mdl,[str_mthd{id} '_dat_filt']); 
       
       % Get raw data
@@ -245,7 +241,7 @@ if(Switch(03))
     % Debug plot
     if(do_debug)
       figure('units','normalized','outerposition',[0 0 1 1]);
-        ii = find(~isnan(segnum));
+        ii = find(is_valid==1);
         xx = lon(ii);
         yy = lat(ii);
         for jj=1:5
@@ -262,7 +258,7 @@ if(Switch(03))
     end
     
     % Save
-    save(['Data\' str_mthd{id} '_' str_mdl{im} '_tidefit.mat'],'tide_fit');
+    save([dir_data '\' str_mthd{id} '_' str_mdl{im} '_tidefit.mat'],'tide_fit');
     
     % Clean-up
     clear n_point tide_fit;
