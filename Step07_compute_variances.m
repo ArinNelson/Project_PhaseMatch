@@ -8,7 +8,7 @@ Switch(01) = 1;     % Do
 % Directories
 addpath('Functions');
 dir_data   = '.\Data';
-dir_mdl    = 'F:\Datasets\HYCOM\PhaseMatch';
+dir_mdl    = '\Datasets\HYCOM\PhaseMatch';
 str_mdl    = {'NonDA_2016','DA_2016','DA_Modern'};
 str_altm   = {'j2','j3'};
 str_mthd   = {'track','lin'};
