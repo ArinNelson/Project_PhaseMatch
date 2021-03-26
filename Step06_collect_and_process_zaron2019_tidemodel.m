@@ -7,7 +7,7 @@ Switch(01) = 1;     % Load and process raw data
 Switch(02) = 1;     % Interpolate to method points
 
 % Strings
-dir_zaron  = 'F:\Datasets\Altimetry\Zaron2019\';
+dir_zaron  = '\Datasets\Altimetry\Zaron2019\';
 file_zaron = 'HRET_v8.1_compressed.nc';
 dir_data = '.\Data';
 str_altm = {'j2','j3'};
